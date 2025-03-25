@@ -1,21 +1,53 @@
+import asyncio
+import os
+
 import pytest
-
+import pytest_asyncio
 from fastapi.testclient import TestClient
-
-from app.database import engine, Base
-from app.main import app
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 
-@pytest.fixture(scope="session", autouse=True)
-async def prepare_database():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+@pytest.fixture(scope='session')
+def settings():
+    from app.config import get_settings
+    os.environ['DATABASE_URL'] = 'sqlite+aiosqlite:///./test.db'
+    os.environ['BASE_URL'] = 'http://testserver/api/v1'
+    return get_settings()
 
 
-@pytest.fixture(scope="function")
-async def async_client():
-    async with TestClient(app, base_url="http://test") as ac:
+@pytest.fixture(scope='session')
+def app(settings):
+    from app.app import create_app
+    app = create_app(settings)
+    yield app
+
+
+@pytest.fixture(scope="session")
+def engine(settings):
+    eng = create_async_engine(settings.DATABASE_URL, echo=True)
+    yield eng
+    asyncio.run(eng.dispose())
+
+
+@pytest.fixture(scope="session")
+def async_session_maker(engine):
+    return async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def setup_db_tables(engine):
+    from app.database import create_tables
+
+    await create_tables(engine)
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db(async_session_maker):
+    async with async_session_maker() as session:
+        yield session
+
+
+@pytest.fixture(scope="session")
+def client(app, settings):
+    with TestClient(app, base_url=settings.BASE_URL) as ac:
         yield ac

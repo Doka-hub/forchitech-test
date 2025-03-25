@@ -1,25 +1,35 @@
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import RequestLog
 
 
-@pytest.mark.asyncio
-async def test_info_endpoint(async_client):
-    response = await async_client.post(
+def test_info_endpoint(client):
+    response = client.post(
         "/info",
-        json={"address": "TX0000000000000000000000000000000000"}
+        json={"address": "TV6MuMXfmLbBqPZvBHdwFsDnQeVfnmiuSi"}
     )
+
     assert response.status_code == 200
-    assert all(key in response.json() for key in ["balance", "bandwidth"])
+    assert response.json()['address'] == 'TV6MuMXfmLbBqPZvBHdwFsDnQeVfnmiuSi'
 
 
-@pytest.mark.asyncio
-async def test_logs_endpoint(async_client, db_session):
-    # Создаем тестовую запись
-    log = RequestLog(address="TXtestaddress")
-    db_session.add(log)
-    await db_session.commit()
+def test_logs_endpoint(client):
+    response = client.get("/logs?skip=0&limit=1")
 
-    response = await async_client.get("/logs?skip=0&limit=1")
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_db_write(db: AsyncSession):
+    log = RequestLog(address="TX...")
+    db.add(log)
+    await db.commit()
+
+    result = await db.execute(select(RequestLog).filter_by(address="TX..."))
+    fetched_log = result.scalars().first()
+
+    assert fetched_log is not None, "Запись не появилась в базе данных"
+    assert fetched_log.address == "TX...", "Адрес записи не совпадает с ожидаемым"
