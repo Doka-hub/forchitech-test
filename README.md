@@ -14,3 +14,13 @@
 - юнит на запись в бд
 
 Примечания: использовать FastAPI, аннотацию(typing), SQLAlchemy ORM, для удобства с взаимодействию с троном можно использовать tronpy, для тестов Pytest
+
+### Quickstart
+1. Запуск докера
+```bash
+docker compose up --build -d
+```
+2. Запуск тестов
+```bash
+docker compose run -rm tests
+```
